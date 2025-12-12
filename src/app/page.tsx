@@ -15,6 +15,41 @@ import { getGeminiInsight, getGeminiInvestmentAnalysis } from "@/lib/gemini"
 // Real-time sync interval (3 seconds)
 const SYNC_INTERVAL = 3000
 
+// API-based Gemini calls to avoid server action cache issues
+async function fetchGeminiInsight(amount: number): Promise<string | null> {
+  try {
+    const res = await fetch('/api/gemini?action=insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return data.result || null
+    }
+  } catch (error) {
+    console.error('Failed to fetch insight:', error)
+  }
+  return null
+}
+
+async function fetchGeminiInvestment(amount: number): Promise<string | null> {
+  try {
+    const res = await fetch('/api/gemini?action=investment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return data.result || null
+    }
+  } catch (error) {
+    console.error('Failed to fetch investment:', error)
+  }
+  return null
+}
+
 export default function Home() {
   // State for Tabs
   const [activeTab, setActiveTab] = useState<"guard" | "invest" | "wallet">("guard")
@@ -114,24 +149,22 @@ export default function Home() {
       console.error('Failed to save log:', error)
     }
 
-    // Fetch AI Insight & Investment Analysis
+    // Fetch AI Insight & Investment Analysis via API routes
     const newTotal = sessionSaved + amount
 
     setIsInsightLoading(true)
     setIsInvestmentLoading(true)
 
-    getGeminiInsight(newTotal)
+    fetchGeminiInsight(newTotal)
       .then((aiText) => {
         if (aiText) setInsight(aiText)
       })
-      .catch(console.error)
       .finally(() => setIsInsightLoading(false))
 
-    getGeminiInvestmentAnalysis(newTotal)
+    fetchGeminiInvestment(newTotal)
       .then((investJson) => {
         if (investJson) setInvestmentData(investJson)
       })
-      .catch(console.error)
       .finally(() => setIsInvestmentLoading(false))
   }
 

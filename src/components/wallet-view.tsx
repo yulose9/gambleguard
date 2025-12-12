@@ -10,7 +10,7 @@ import {
     AlertTriangle
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getWalletAnalysis } from "@/lib/gemini"
+// AI analysis is now fetched via API route to avoid server action cache issues
 
 // NoSQL-style Document Interface
 export interface TransactionLog {
@@ -386,13 +386,24 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
         )
     }, [logs, searchQuery])
 
-    // Get AI Analysis
+    // Get AI Analysis via API route (not server action to avoid cache mismatch)
     useEffect(() => {
         if (logs.length > 0) {
             setIsAnalysisLoading(true)
             const fetchAnalysis = async () => {
-                const result = await getWalletAnalysis(logs)
-                if (result) setAnalysis(result)
+                try {
+                    const res = await fetch('/api/gemini?action=wallet', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ logs })
+                    })
+                    if (res.ok) {
+                        const data = await res.json()
+                        if (data.result) setAnalysis(data.result)
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch wallet analysis:', error)
+                }
                 setIsAnalysisLoading(false)
             }
             fetchAnalysis()
