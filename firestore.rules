@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Since we use Firebase Admin SDK on the server,
+    // which bypasses these rules, we can deny all client access.
+    // This is the most secure configuration.
+    
+    match /{document=**} {
+      // Deny all direct client-side access
+      // The Admin SDK (used by our Cloud Run server) bypasses these rules
+      allow read, write: if false;
+    }
+  }
+}
