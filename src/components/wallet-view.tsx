@@ -386,9 +386,18 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
         )
     }, [logs, searchQuery])
 
-    // Get AI Analysis via API route (not server action to avoid cache mismatch)
+    // Create a fingerprint of logs to detect actual changes
+    // This prevents re-fetching when logs array reference changes but content is the same
+    const logsFingerprint = useMemo(() => {
+        if (logs.length === 0) return 'empty'
+        const total = logs.reduce((acc, log) => acc + log.amount, 0)
+        const latestId = logs[0]?.id || 'none'
+        return `${logs.length}-${total}-${latestId}`
+    }, [logs])
+
+    // Get AI Analysis via API route - ONLY when logs actually change
     useEffect(() => {
-        if (logs.length > 0) {
+        if (logs.length > 0 && logsFingerprint !== 'empty') {
             setIsAnalysisLoading(true)
             const fetchAnalysis = async () => {
                 try {
@@ -410,7 +419,8 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
         } else {
             setAnalysis("Start logging your savings to get AI-powered financial insights.")
         }
-    }, [logs])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [logsFingerprint]) // Only trigger when fingerprint changes, not logs array
 
     // Format date with relative labels
     const formatDate = (timestamp: string) => {
