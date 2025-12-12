@@ -124,11 +124,14 @@ OUTPUT FORMAT: Raw JSON only. No markdown. No code blocks.
     {
       "title": "Dream Goal",
       "icon": "goal",
-      "prediction": "What tangible thing in Philippines this could buy if grown (car downpayment, sari-sari store capital, house renovation). Theme: Make money your slave.",
+      "prediction": "Motivational text about what this money could buy. Theme: Make money your slave.",
       "projectedValue": "₱X,XXX - ₱X,XXX",
       "roi": "...",
       "color": "purple",
-      "timeHorizon": "..."
+      "timeHorizon": "...",
+      "dreamItems": [
+        { "name": "Item Name (e.g. Toyota Innova, Gaming PC)", "price": "Approx Price", "category": "car or tech or house or business" }
+      ]
     }
   ]
 }
@@ -137,6 +140,10 @@ RULES:
 - Use realistic Philippine peso values
 - Predictions should be relatable ("like owning digital land")
 - Include risk warnings naturally
+- For dreamItems, suggest 3 diverse items that the user could aim for. prioritizing:
+    - Cars: Toyota Innova, Supra, or popular PH cars
+    - Tech: iPhone 16/Latest, Samsung S24, Google Pixel, High-end Gaming PC
+    - Property: Downpayment for house/condo, Sari-sari store
 - NO markdown, just raw JSON`;
 
         const result = await ai.models.generateContent({
@@ -190,11 +197,16 @@ function getFallbackInvestmentData(amount: number) {
             {
                 title: "Dream Goal",
                 icon: "goal",
-                prediction: `Let this money work for you instead of losing it to the casino. In 5 years, this could fund a sari-sari store or a car downpayment. Make money your slave, not your master.`,
+                prediction: `Let this money work for you. In 5 years, this could fund a business or your dream tech. Make money your slave, not your master.`,
                 projectedValue: `₱${(amount * 3).toLocaleString()} - ₱${(amount * 4).toLocaleString()}`,
                 roi: "Financial Freedom",
                 color: "purple",
-                timeHorizon: "5 Years"
+                timeHorizon: "5 Years",
+                dreamItems: [
+                    { name: "High-End Gaming PC", price: "₱150,000", category: "tech" },
+                    { name: "Toyota Innova (Downpayment)", price: "₱300,000", category: "car" },
+                    { name: "Sari-Sari Store Capital", price: "₱50,000", category: "business" }
+                ]
             }
         ]
     };

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bitcoin, TrendingUp, DollarSign, Target, Sparkles, Clock, AlertTriangle, ChevronDown } from "lucide-react"
+import { Bitcoin, TrendingUp, DollarSign, Target, Sparkles, Clock, AlertTriangle, ChevronDown, Car, Smartphone, Home, Briefcase } from "lucide-react"
 
 interface InvestmentInsightProps {
     amount: number
@@ -18,6 +18,11 @@ interface InvestmentCard {
     roi: string
     color: "amber" | "emerald" | "blue" | "purple"
     timeHorizon?: string
+    dreamItems?: {
+        name: string
+        price: string
+        category: "car" | "tech" | "house" | "business"
+    }[]
 }
 
 interface AnalysisData {
@@ -246,7 +251,6 @@ function ExpandableInvestmentCard({
                             </motion.div>
                         </div>
 
-                        {/* ROI Badge */}
                         <motion.div
                             className={`
                                 w-full py-3 px-4 rounded-xl
@@ -260,6 +264,44 @@ function ExpandableInvestmentCard({
                             {card.roi}
                         </motion.div>
                     </motion.div>
+
+                    {/* Dream Items Interactive View */}
+                    {card.dreamItems && card.dreamItems.length > 0 && (
+                        <div className="mt-6 pt-4 border-t border-slate-800/50">
+                            <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-3">
+                                What this buys you
+                            </p>
+                            <div className="space-y-3">
+                                {card.dreamItems.map((item, i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.2 + (i * 0.1) }}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/30 hover:bg-slate-800/60 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${scheme.iconBg} ${scheme.icon}`}>
+                                                {item.category === 'car' && <Car className="w-4 h-4" />}
+                                                {item.category === 'tech' && <Smartphone className="w-4 h-4" />}
+                                                {item.category === 'house' && <Home className="w-4 h-4" />}
+                                                {item.category === 'business' && <Briefcase className="w-4 h-4" />}
+                                                {/* Fallback */}
+                                                {!['car', 'tech', 'house', 'business'].includes(item.category) && <Target className="w-4 h-4" />}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-slate-200">{item.name}</span>
+                                                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Target</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm font-mono font-bold text-slate-300">
+                                            {item.price}
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </motion.div>
             </motion.div>
         </motion.div>
