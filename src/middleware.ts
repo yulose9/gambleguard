@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/api/auth/login', '/api/auth/register']
+const publicRoutes = ['/login', '/api/auth/login', '/api/auth/register', '/api/shared-logs']
 
 // Routes that should be accessible without auth (API routes for checking session)
 const semiPublicRoutes = ['/api/auth/session']
