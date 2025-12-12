@@ -1,22 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { LogEntry } from "@/components/log-entry"
 import { VersusMode } from "@/components/versus-mode"
 import { GeminiInsight } from "@/components/gemini-insight"
 import { InvestmentInsight } from "@/components/investment-insight"
 import { WalletView, TransactionLog } from "@/components/wallet-view"
-import { ShieldCheck, TrendingUp, Wallet, CloudUpload, Sparkles, Menu } from "lucide-react"
+import { ShieldCheck, TrendingUp, Wallet, CloudUpload, Sparkles, Menu, RefreshCw } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { SlotCounter } from "@/components/ui/slot-counter"
 
 import { getGeminiInsight, getGeminiInvestmentAnalysis } from "@/lib/gemini"
 
+// Real-time sync interval (3 seconds)
+const SYNC_INTERVAL = 3000
+
 export default function Home() {
   // State for Tabs
   const [activeTab, setActiveTab] = useState<"guard" | "invest" | "wallet">("guard")
 
-  // State for Logs (NoSQL-style structure)
+  // State for Logs (SHARED GLOBAL DATABASE)
   const [logs, setLogs] = useState<TransactionLog[]>([])
 
   // State for persistent Insight
@@ -27,55 +30,61 @@ export default function Home() {
   const [investmentData, setInvestmentData] = useState<string | null>(null)
   const [isInvestmentLoading, setIsInvestmentLoading] = useState(false)
 
-  // Sync button state
+  // Sync state
   const [isSyncing, setIsSyncing] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(true)
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Derived State
   const sessionSaved = logs.reduce((acc, log) => acc + log.amount, 0)
   const [lastAdded, setLastAdded] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load logs from Firestore on mount
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch('/api/logs')
-        if (res.ok) {
-          const data = await res.json()
-          if (data.logs) {
-            setLogs(data.logs)
-          }
+  // Fetch logs from SHARED database
+  const fetchLogs = useCallback(async (showLoading = false) => {
+    if (showLoading) setIsSyncing(true)
+    try {
+      const res = await fetch('/api/shared-logs')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.logs) {
+          setLogs(data.logs)
+          setLastSyncTime(new Date())
         }
-      } catch (error) {
-        console.error('Failed to fetch logs from Firestore:', error)
-        // Fallback to localStorage
-        const savedLogs = localStorage.getItem('gambleguard-logs')
-        if (savedLogs) {
-          try {
-            setLogs(JSON.parse(savedLogs))
-          } catch (e) {
-            console.error('Failed to load logs from localStorage')
-          }
-        }
-      } finally {
-        setIsLoading(false)
       }
+    } catch (error) {
+      console.error('Failed to fetch shared logs:', error)
+    } finally {
+      if (showLoading) setIsSyncing(false)
+      setIsLoading(false)
     }
-    fetchLogs()
   }, [])
 
-  // Save to localStorage as backup whenever logs change
+  // Initial load + Real-time polling
   useEffect(() => {
-    if (logs.length > 0) {
-      localStorage.setItem('gambleguard-logs', JSON.stringify(logs))
-    }
-  }, [logs])
+    // Initial fetch
+    fetchLogs(true)
 
+    // Set up real-time polling
+    if (isRealTimeEnabled) {
+      syncIntervalRef.current = setInterval(() => {
+        fetchLogs(false) // Silent background sync
+      }, SYNC_INTERVAL)
+    }
+
+    // Cleanup
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current)
+      }
+    }
+  }, [fetchLogs, isRealTimeEnabled])
+
+  // Add log to SHARED database
   const handleLog = async (amount: number) => {
-    // 1. Add Log to Firestore via API
     try {
-      const res = await fetch('/api/logs', {
+      const res = await fetch('/api/shared-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -96,33 +105,21 @@ export default function Home() {
           category: 'Gambling Prevention',
           note: 'Resisted urge to gamble'
         }
+        // Optimistic update + will be synced on next poll
         setLogs(prev => [newLog, ...prev])
         setLastAdded(amount)
         setTimeout(() => setLastAdded(null), 3000)
       }
     } catch (error) {
-      console.error('Failed to save log to Firestore:', error)
-      // Fallback: add locally anyway
-      const newLog: TransactionLog = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        amount: amount,
-        timestamp: new Date().toISOString(),
-        type: 'saved',
-        category: 'Gambling Prevention',
-        note: 'Resisted urge to gamble'
-      }
-      setLogs(prev => [newLog, ...prev])
-      setLastAdded(amount)
-      setTimeout(() => setLastAdded(null), 3000)
+      console.error('Failed to save log:', error)
     }
 
-    // 2. Fetch AI Insight & Investment Analysis
+    // Fetch AI Insight & Investment Analysis
     const newTotal = sessionSaved + amount
 
     setIsInsightLoading(true)
     setIsInvestmentLoading(true)
 
-    // Parallel Fetching with error handling
     getGeminiInsight(newTotal)
       .then((aiText) => {
         if (aiText) setInsight(aiText)
@@ -138,62 +135,37 @@ export default function Home() {
       .finally(() => setIsInvestmentLoading(false))
   }
 
-  const handleSync = async () => {
-    setIsSyncing(true)
-    setSyncStatus('idle')
-    try {
-      const res = await fetch('/api/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'user-demo', logs })
-      })
-      if (res.ok) {
-        setSyncStatus('success')
-        setTimeout(() => setSyncStatus('idle'), 3000)
-      } else {
-        setSyncStatus('error')
-      }
-    } catch {
-      setSyncStatus('error')
-    } finally {
-      setIsSyncing(false)
-    }
+  // Manual sync
+  const handleManualSync = () => {
+    fetchLogs(true)
   }
 
-  // Delete single log
+  // Delete single log from SHARED database
   const handleDeleteLog = async (logId: string) => {
     // Optimistic update
     setLogs(prev => prev.filter(log => log.id !== logId))
 
-    // Delete from Firestore via API
     try {
-      await fetch(`/api/logs?id=${logId}`, { method: 'DELETE' })
+      await fetch(`/api/shared-logs?id=${logId}`, { method: 'DELETE' })
     } catch (error) {
       console.error('Failed to delete log:', error)
-    }
-
-    // Update localStorage
-    const updatedLogs = logs.filter(log => log.id !== logId)
-    if (updatedLogs.length > 0) {
-      localStorage.setItem('gambleguard-logs', JSON.stringify(updatedLogs))
-    } else {
-      localStorage.removeItem('gambleguard-logs')
+      // Refetch to restore if failed
+      fetchLogs(false)
     }
   }
 
-  // Delete all logs
+  // Delete all logs from SHARED database
   const handleDeleteAllLogs = async () => {
     // Optimistic update
     setLogs([])
     setInsight(null)
     setInvestmentData(null)
-    localStorage.removeItem('gambleguard-logs')
 
-    // Delete from Firestore via API
     try {
-      await fetch('/api/logs?all=true', { method: 'DELETE' })
+      await fetch('/api/shared-logs?all=true', { method: 'DELETE' })
     } catch (error) {
       console.error('Failed to delete all logs:', error)
+      fetchLogs(false)
     }
   }
 
@@ -234,20 +206,24 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Sync Button */}
-          <button
-            onClick={handleSync}
-            disabled={isSyncing || logs.length === 0}
-            className={`text-xs flex items-center gap-1.5 transition-all border rounded-full px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${syncStatus === 'success'
-              ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/10'
-              : syncStatus === 'error'
-                ? 'text-red-400 border-red-500/50 bg-red-500/10'
-                : 'text-slate-500 border-slate-800 hover:text-emerald-400 hover:border-emerald-500/30'
-              }`}
-          >
-            <CloudUpload className={`w-4 h-4 ${isSyncing ? 'animate-pulse' : ''}`} />
-            {isSyncing ? 'Syncing...' : syncStatus === 'success' ? 'Synced!' : 'Sync'}
-          </button>
+          {/* Real-Time Sync Indicator */}
+          <div className="flex items-center gap-2">
+            {/* Live indicator */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] text-emerald-400 font-semibold">LIVE</span>
+            </div>
+
+            {/* Manual sync button */}
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="text-xs flex items-center gap-1.5 transition-all border rounded-full px-3 py-1.5 disabled:opacity-40 text-slate-500 border-slate-800 hover:text-emerald-400 hover:border-emerald-500/30"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
         </header>
 
         {/* Tab Content */}
