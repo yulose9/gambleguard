@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
-import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion"
+import { useState, useEffect, useMemo } from "react"
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion"
 import { format, isToday, isYesterday } from "date-fns"
 import {
     Search, Download, TrendingUp,
     Sparkles, CheckCircle2, Clock,
     ArrowUpRight, Wallet as WalletIcon, Trash2,
-    AlertTriangle, X
+    AlertTriangle
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getWalletAnalysis } from "@/lib/gemini"
@@ -28,7 +28,7 @@ interface WalletViewProps {
     onDeleteAllLogs?: () => void
 }
 
-// Swipeable Transaction Item Component
+// Swipeable Transaction Item Component with proper reveal behavior
 function SwipeableTransaction({
     log,
     index,
@@ -41,53 +41,109 @@ function SwipeableTransaction({
     formatDate: (timestamp: string) => string
 }) {
     const x = useMotionValue(0)
-    const deleteOpacity = useTransform(x, [-100, -50], [1, 0])
-    const deleteScale = useTransform(x, [-100, -50], [1, 0.8])
-    const [isDragging, setIsDragging] = useState(false)
+    const [isRevealed, setIsRevealed] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
 
-    const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-        setIsDragging(false)
-        if (info.offset.x < -100) {
-            // Trigger delete
-            onDelete(log.id)
+    // Transform for delete button opacity and scale
+    const deleteOpacity = useTransform(x, [-80, -40, 0], [1, 0.5, 0])
+    const deleteScale = useTransform(x, [-80, -40, 0], [1, 0.8, 0.6])
+    const cardOpacity = useTransform(x, [-200, -100], [0, 1])
+
+    const handleDragEnd = () => {
+        const currentX = x.get()
+
+        if (currentX < -50) {
+            // Reveal delete button - snap to -80px
+            animate(x, -80, { type: "spring", stiffness: 500, damping: 30 })
+            setIsRevealed(true)
+        } else {
+            // Reset position
+            animate(x, 0, { type: "spring", stiffness: 500, damping: 30 })
+            setIsRevealed(false)
         }
+    }
+
+    const handleDelete = async () => {
+        setIsDeleting(true)
+        // Animate out
+        await animate(x, -300, { duration: 0.3, ease: "easeInOut" })
+        onDelete(log.id)
+    }
+
+    const handleReset = () => {
+        animate(x, 0, { type: "spring", stiffness: 500, damping: 30 })
+        setIsRevealed(false)
     }
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, x: -300, transition: { duration: 0.2 } }}
-            transition={{ delay: index * 0.03 }}
-            className="relative overflow-hidden"
+            layout
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{
+                opacity: isDeleting ? 0 : 1,
+                y: 0,
+                scale: 1,
+                height: isDeleting ? 0 : "auto",
+                marginBottom: isDeleting ? 0 : 8
+            }}
+            exit={{
+                opacity: 0,
+                x: -300,
+                scale: 0.8,
+                height: 0,
+                marginBottom: 0,
+                transition: { duration: 0.3, ease: "easeInOut" }
+            }}
+            transition={{
+                delay: index * 0.05,
+                layout: { type: "spring", stiffness: 300, damping: 25 }
+            }}
+            className="relative overflow-hidden rounded-xl"
         >
-            {/* Delete Button Background */}
+            {/* Delete Button Background - Always present but revealed on swipe */}
             <motion.div
                 style={{ opacity: deleteOpacity, scale: deleteScale }}
-                className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-red-500/30 to-transparent rounded-r-xl flex items-center justify-end pr-4"
+                className="absolute right-0 top-0 bottom-0 w-20 flex items-center justify-center"
             >
-                <div className="flex flex-col items-center gap-1">
-                    <Trash2 className="w-5 h-5 text-red-400" />
-                    <span className="text-[10px] text-red-400 font-medium">Delete</span>
-                </div>
+                <motion.button
+                    onClick={handleDelete}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    className="flex flex-col items-center gap-1 px-4 py-3 bg-red-500/20 rounded-xl border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                >
+                    <motion.div
+                        animate={{ rotate: isRevealed ? [0, -10, 10, -10, 0] : 0 }}
+                        transition={{ duration: 0.5, delay: 0.2 }}
+                    >
+                        <Trash2 className="w-5 h-5 text-red-400" />
+                    </motion.div>
+                    <span className="text-[10px] text-red-400 font-semibold">Delete</span>
+                </motion.button>
             </motion.div>
 
             {/* Swipeable Card */}
             <motion.div
                 drag="x"
-                dragConstraints={{ left: -120, right: 0 }}
-                dragElastic={0.2}
-                onDragStart={() => setIsDragging(true)}
+                dragConstraints={{ left: -80, right: 0 }}
+                dragElastic={0.1}
                 onDragEnd={handleDragEnd}
-                style={{ x }}
-                className={`card-premium rounded-xl p-4 group hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing ${isDragging ? 'z-10' : ''}`}
+                onClick={isRevealed ? handleReset : undefined}
+                style={{ x, opacity: cardOpacity }}
+                className="card-premium rounded-xl p-4 group hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing relative z-10 bg-slate-900/95"
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        {/* Status Icon */}
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                        {/* Status Icon with pulse animation on new items */}
+                        <motion.div
+                            className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors"
+                            initial={isToday(new Date(log.timestamp)) ? { scale: 0.8 } : {}}
+                            animate={isToday(new Date(log.timestamp)) ? {
+                                scale: [1, 1.1, 1],
+                                transition: { duration: 2, repeat: Infinity, repeatDelay: 3 }
+                            } : {}}
+                        >
                             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        </div>
+                        </motion.div>
 
                         {/* Details */}
                         <div>
@@ -96,24 +152,38 @@ function SwipeableTransaction({
                                     {formatDate(log.timestamp)}
                                 </span>
                                 {isToday(new Date(log.timestamp)) && (
-                                    <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">
+                                    <motion.span
+                                        initial={{ opacity: 0, scale: 0.5 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded"
+                                    >
                                         NEW
-                                    </span>
+                                    </motion.span>
                                 )}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span>{format(new Date(log.timestamp), 'h:mm a')}</span>
                                 <span>•</span>
-                                <span className="text-emerald-500/70">← Swipe to delete</span>
+                                <motion.span
+                                    className="text-slate-600"
+                                    animate={{ opacity: isRevealed ? 0 : 0.7 }}
+                                >
+                                    ← Swipe to delete
+                                </motion.span>
                             </div>
                         </div>
                     </div>
 
                     {/* Amount */}
                     <div className="text-right">
-                        <div className="font-mono font-black text-lg text-emerald-400">
+                        <motion.div
+                            className="font-mono font-black text-lg text-emerald-400"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.05 + 0.2 }}
+                        >
                             +₱{log.amount.toLocaleString()}
-                        </div>
+                        </motion.div>
                         <div className="text-[10px] text-slate-600 font-mono">
                             #{log.id.slice(0, 8)}
                         </div>
@@ -124,7 +194,7 @@ function SwipeableTransaction({
     )
 }
 
-// Delete All Confirmation Modal
+// Delete All Confirmation Modal with enhanced animations
 function DeleteAllModal({
     isOpen,
     onClose,
@@ -149,70 +219,131 @@ function DeleteAllModal({
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            {/* Backdrop with blur */}
+            <motion.div
+                initial={{ backdropFilter: "blur(0px)" }}
+                animate={{ backdropFilter: "blur(8px)" }}
+                exit={{ backdropFilter: "blur(0px)" }}
+                className="absolute inset-0 bg-black/70"
                 onClick={onClose}
             />
 
-            {/* Modal */}
+            {/* Modal with bounce animation */}
             <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
+                initial={{ scale: 0.8, y: 50, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.8, y: 50, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 className="relative w-full max-w-md"
             >
-                <div className="card-premium rounded-2xl p-6 border-red-500/30">
-                    {/* Warning Icon */}
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 flex items-center justify-center">
+                <div className="card-premium rounded-2xl p-6 border-red-500/30 overflow-hidden">
+                    {/* Animated background pulse */}
+                    <motion.div
+                        className="absolute inset-0 bg-red-500/5"
+                        animate={{ opacity: [0.05, 0.1, 0.05] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    />
+
+                    {/* Warning Icon with shake animation */}
+                    <motion.div
+                        className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 flex items-center justify-center relative z-10"
+                        animate={{ rotate: [0, -5, 5, -5, 0] }}
+                        transition={{ duration: 0.5, delay: 0.3 }}
+                    >
                         <AlertTriangle className="w-8 h-8 text-red-400" />
-                    </div>
+                    </motion.div>
 
                     {/* Title */}
-                    <h2 className="text-xl font-bold text-center text-white mb-2">
+                    <motion.h2
+                        className="text-xl font-bold text-center text-white mb-2 relative z-10"
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.1 }}
+                    >
                         Delete All Logs?
-                    </h2>
+                    </motion.h2>
 
                     {/* Description */}
-                    <p className="text-center text-slate-400 text-sm mb-4">
+                    <motion.p
+                        className="text-center text-slate-400 text-sm mb-4 relative z-10"
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                    >
                         This action cannot be undone. You are about to permanently delete:
-                    </p>
+                    </motion.p>
 
-                    {/* Stats */}
-                    <div className="bg-red-500/10 rounded-xl p-4 mb-6">
+                    {/* Stats with count-up animation feel */}
+                    <motion.div
+                        className="bg-red-500/10 rounded-xl p-4 mb-6 relative z-10"
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                    >
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-slate-400 text-sm">Total Logs:</span>
-                            <span className="font-bold text-red-400">{logCount} entries</span>
+                            <motion.span
+                                className="font-bold text-red-400"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.4 }}
+                            >
+                                {logCount} entries
+                            </motion.span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 text-sm">Total Value:</span>
-                            <span className="font-mono font-bold text-red-400">₱{totalAmount.toLocaleString()}</span>
+                            <motion.span
+                                className="font-mono font-bold text-red-400"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.5 }}
+                            >
+                                ₱{totalAmount.toLocaleString()}
+                            </motion.span>
                         </div>
-                    </div>
+                    </motion.div>
 
-                    {/* Confirmation Text */}
-                    <p className="text-center text-xs text-slate-500 mb-6">
-                        Type <span className="font-mono font-bold text-red-400">DELETE</span> in your mind,
-                        then click the button if you're absolutely sure.
-                    </p>
+                    {/* Warning text with typewriter effect feel */}
+                    <motion.p
+                        className="text-center text-xs text-slate-500 mb-6 relative z-10"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.6 }}
+                    >
+                        ⚠️ All your progress will be lost forever
+                    </motion.p>
 
                     {/* Buttons */}
-                    <div className="flex gap-3">
-                        <button
+                    <motion.div
+                        className="flex gap-3 relative z-10"
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.4 }}
+                    >
+                        <motion.button
                             onClick={onClose}
                             disabled={isDeleting}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                             className="flex-1 py-3 px-4 rounded-xl border border-slate-700 text-slate-300 font-medium hover:bg-slate-800/50 transition-colors disabled:opacity-50"
                         >
                             Cancel
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
                             onClick={onConfirm}
                             disabled={isDeleting}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                             className="flex-1 py-3 px-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-400 font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {isDeleting ? (
                                 <>
-                                    <div className="w-4 h-4 rounded-full border-2 border-red-400/30 border-t-red-400 animate-spin" />
+                                    <motion.div
+                                        className="w-4 h-4 rounded-full border-2 border-red-400/30 border-t-red-400"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                    />
                                     Deleting...
                                 </>
                             ) : (
@@ -221,8 +352,8 @@ function DeleteAllModal({
                                     Delete All
                                 </>
                             )}
-                        </button>
-                    </div>
+                        </motion.button>
+                    </motion.div>
                 </div>
             </motion.div>
         </motion.div>
@@ -235,7 +366,6 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
     const [isAnalysisLoading, setIsAnalysisLoading] = useState(false)
     const [showDeleteAllModal, setShowDeleteAllModal] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
-    const [deletingLogId, setDeletingLogId] = useState<string | null>(null)
 
     // Derived State
     const totalSaved = logs.reduce((acc, log) => acc + log.amount, 0)
@@ -282,12 +412,7 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
     // Handle single log deletion
     const handleDeleteLog = async (logId: string) => {
         if (!onDeleteLog) return
-        setDeletingLogId(logId)
-        try {
-            await onDeleteLog(logId)
-        } finally {
-            setDeletingLogId(null)
-        }
+        await onDeleteLog(logId)
     }
 
     // Handle delete all
@@ -340,56 +465,48 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
             </AnimatePresence>
 
             <div className="w-full max-w-4xl mx-auto space-y-6 pb-24">
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <Card className="card-premium">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                                <WalletIcon className="w-3.5 h-3.5 text-emerald-500" />
-                                Total Saved
-                            </div>
-                            <div className="text-2xl font-black text-emerald-400 font-mono">
-                                ₱{totalSaved.toLocaleString()}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="card-premium">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                                <Clock className="w-3.5 h-3.5 text-blue-500" />
-                                Today
-                            </div>
-                            <div className="text-2xl font-black text-blue-400 font-mono">
-                                ₱{todaySaved.toLocaleString()}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="card-premium">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                                <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
-                                Avg. Entry
-                            </div>
-                            <div className="text-2xl font-black text-amber-400 font-mono">
-                                ₱{Math.round(averageEntry).toLocaleString()}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="card-premium">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                                <ArrowUpRight className="w-3.5 h-3.5 text-purple-500" />
-                                Best Save
-                            </div>
-                            <div className="text-2xl font-black text-purple-400 font-mono">
-                                ₱{highestSave.toLocaleString()}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                {/* Stats Grid with stagger animation */}
+                <motion.div
+                    className="grid grid-cols-2 md:grid-cols-4 gap-3"
+                    initial="hidden"
+                    animate="visible"
+                    variants={{
+                        hidden: {},
+                        visible: { transition: { staggerChildren: 0.1 } }
+                    }}
+                >
+                    {[
+                        { icon: WalletIcon, label: "Total Saved", value: totalSaved, color: "emerald" },
+                        { icon: Clock, label: "Today", value: todaySaved, color: "blue" },
+                        { icon: TrendingUp, label: "Avg. Entry", value: Math.round(averageEntry), color: "amber" },
+                        { icon: ArrowUpRight, label: "Best Save", value: highestSave, color: "purple" },
+                    ].map((stat, i) => (
+                        <motion.div
+                            key={stat.label}
+                            variants={{
+                                hidden: { opacity: 0, y: 20 },
+                                visible: { opacity: 1, y: 0 }
+                            }}
+                        >
+                            <Card className="card-premium">
+                                <CardContent className="p-4">
+                                    <div className={`flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2`}>
+                                        <stat.icon className={`w-3.5 h-3.5 text-${stat.color}-500`} />
+                                        {stat.label}
+                                    </div>
+                                    <motion.div
+                                        className={`text-2xl font-black text-${stat.color}-400 font-mono`}
+                                        initial={{ opacity: 0, scale: 0.5 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: i * 0.1 + 0.3 }}
+                                    >
+                                        ₱{stat.value.toLocaleString()}
+                                    </motion.div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    ))}
+                </motion.div>
 
                 {/* AI Insight Card */}
                 <Card className="card-premium border-indigo-500/20 overflow-hidden">
@@ -412,7 +529,11 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                                     exit={{ opacity: 0 }}
                                     className="flex items-center gap-2 text-sm text-slate-400"
                                 >
-                                    <div className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+                                    <motion.div
+                                        className="w-4 h-4 rounded-full border-2 border-indigo-500/30 border-t-indigo-500"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                    />
                                     Analyzing patterns...
                                 </motion.div>
                             ) : (
@@ -442,32 +563,45 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                         />
                     </div>
                     <div className="flex gap-2">
-                        <button
+                        <motion.button
                             onClick={handleExport}
                             disabled={logs.length === 0}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                             className="flex items-center gap-2 px-4 py-2.5 card-premium rounded-xl text-sm font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Download className="w-4 h-4" />
                             Export
-                        </button>
+                        </motion.button>
                         {onDeleteAllLogs && logs.length > 0 && (
-                            <button
+                            <motion.button
                                 onClick={() => setShowDeleteAllModal(true)}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                                 className="flex items-center gap-2 px-4 py-2.5 card-premium rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors border-red-500/20"
                             >
                                 <Trash2 className="w-4 h-4" />
                                 Delete All
-                            </button>
+                            </motion.button>
                         )}
                     </div>
                 </div>
 
-                {/* Swipe Hint */}
+                {/* Swipe Hint with animation */}
                 {logs.length > 0 && onDeleteLog && (
-                    <div className="flex items-center gap-2 px-1 text-[10px] text-slate-600">
-                        <span className="inline-block w-4 h-0.5 bg-gradient-to-r from-slate-600 to-transparent" />
-                        <span>Swipe left on any transaction to delete</span>
-                    </div>
+                    <motion.div
+                        className="flex items-center gap-2 px-1 text-[10px] text-slate-600"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.5 }}
+                    >
+                        <motion.span
+                            className="inline-block w-6 h-0.5 bg-gradient-to-r from-slate-500 to-transparent"
+                            animate={{ x: [0, 5, 0] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                        <span>Swipe left on any transaction to reveal delete</span>
+                    </motion.div>
                 )}
 
                 {/* Transaction List */}
@@ -476,21 +610,31 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                         <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
                             Transaction History
                         </span>
-                        <span className="text-xs text-slate-600">
+                        <motion.span
+                            className="text-xs text-slate-600"
+                            key={filteredLogs.length}
+                            initial={{ scale: 1.2, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                        >
                             {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
-                        </span>
+                        </motion.span>
                     </div>
 
                     <AnimatePresence mode="popLayout">
                         {filteredLogs.length === 0 ? (
                             <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
                                 className="card-premium rounded-xl p-12 text-center"
                             >
-                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800/50 flex items-center justify-center">
+                                <motion.div
+                                    className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800/50 flex items-center justify-center"
+                                    animate={{ rotate: [0, 10, -10, 0] }}
+                                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                                >
                                     <WalletIcon className="w-8 h-8 text-slate-600" />
-                                </div>
+                                </motion.div>
                                 <p className="text-slate-500 font-medium">
                                     {searchQuery ? 'No matching transactions' : 'No transactions yet'}
                                 </p>
@@ -499,7 +643,7 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                                 </p>
                             </motion.div>
                         ) : (
-                            <div className="space-y-2">
+                            <motion.div layout className="space-y-2">
                                 {filteredLogs.map((log, index) => (
                                     onDeleteLog ? (
                                         <SwipeableTransaction
@@ -512,8 +656,10 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                                     ) : (
                                         <motion.div
                                             key={log.id}
+                                            layout
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, x: -100 }}
                                             transition={{ delay: index * 0.03 }}
                                             className="card-premium rounded-xl p-4 group hover:border-emerald-500/30 transition-all"
                                         >
@@ -552,7 +698,7 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                                         </motion.div>
                                     )
                                 ))}
-                            </div>
+                            </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
@@ -560,13 +706,17 @@ export function WalletView({ logs, onDeleteLog, onDeleteAllLogs }: WalletViewPro
                 {/* Bottom Stats Summary */}
                 {logs.length > 0 && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
                         className="card-premium rounded-xl p-4"
                     >
                         <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2 text-slate-400">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <motion.span
+                                    className="w-2 h-2 rounded-full bg-emerald-500"
+                                    animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                />
                                 <span>Streak: {logs.length} saves</span>
                             </div>
                             <div className="text-slate-500">

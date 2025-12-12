@@ -34,20 +34,38 @@ export default function Home() {
   // Derived State
   const sessionSaved = logs.reduce((acc, log) => acc + log.amount, 0)
   const [lastAdded, setLastAdded] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Load logs from localStorage on mount
+  // Load logs from Firestore on mount
   useEffect(() => {
-    const savedLogs = localStorage.getItem('gambleguard-logs')
-    if (savedLogs) {
+    const fetchLogs = async () => {
       try {
-        setLogs(JSON.parse(savedLogs))
-      } catch (e) {
-        console.error('Failed to load logs from localStorage')
+        const res = await fetch('/api/logs')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.logs) {
+            setLogs(data.logs)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch logs from Firestore:', error)
+        // Fallback to localStorage
+        const savedLogs = localStorage.getItem('gambleguard-logs')
+        if (savedLogs) {
+          try {
+            setLogs(JSON.parse(savedLogs))
+          } catch (e) {
+            console.error('Failed to load logs from localStorage')
+          }
+        }
+      } finally {
+        setIsLoading(false)
       }
     }
+    fetchLogs()
   }, [])
 
-  // Save logs to localStorage whenever they change
+  // Save to localStorage as backup whenever logs change
   useEffect(() => {
     if (logs.length > 0) {
       localStorage.setItem('gambleguard-logs', JSON.stringify(logs))
@@ -55,19 +73,48 @@ export default function Home() {
   }, [logs])
 
   const handleLog = async (amount: number) => {
-    // 1. Add Log locally first
-    const newLog: TransactionLog = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      amount: amount,
-      timestamp: new Date().toISOString(),
-      type: 'saved',
-      category: 'Gambling Prevention',
-      note: 'Resisted urge to gamble'
-    }
+    // 1. Add Log to Firestore via API
+    try {
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          category: 'Gambling Prevention',
+          note: 'Resisted urge to gamble',
+          type: 'saved'
+        })
+      })
 
-    setLogs(prev => [newLog, ...prev])
-    setLastAdded(amount)
-    setTimeout(() => setLastAdded(null), 3000)
+      if (res.ok) {
+        const data = await res.json()
+        const newLog: TransactionLog = {
+          id: data.logId,
+          amount: amount,
+          timestamp: new Date().toISOString(),
+          type: 'saved',
+          category: 'Gambling Prevention',
+          note: 'Resisted urge to gamble'
+        }
+        setLogs(prev => [newLog, ...prev])
+        setLastAdded(amount)
+        setTimeout(() => setLastAdded(null), 3000)
+      }
+    } catch (error) {
+      console.error('Failed to save log to Firestore:', error)
+      // Fallback: add locally anyway
+      const newLog: TransactionLog = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        amount: amount,
+        timestamp: new Date().toISOString(),
+        type: 'saved',
+        category: 'Gambling Prevention',
+        note: 'Resisted urge to gamble'
+      }
+      setLogs(prev => [newLog, ...prev])
+      setLastAdded(amount)
+      setTimeout(() => setLastAdded(null), 3000)
+    }
 
     // 2. Fetch AI Insight & Investment Analysis
     const newTotal = sessionSaved + amount

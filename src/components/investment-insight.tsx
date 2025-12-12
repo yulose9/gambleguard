@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo } from "react"
-import { motion } from "framer-motion"
-import { Bitcoin, TrendingUp, DollarSign, Target, Sparkles, Clock, AlertTriangle } from "lucide-react"
+import { useMemo, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Bitcoin, TrendingUp, DollarSign, Target, Sparkles, Clock, AlertTriangle, ChevronDown } from "lucide-react"
 
 interface InvestmentInsightProps {
     amount: number
@@ -34,7 +34,8 @@ const colorSchemes = {
         textMuted: "text-amber-200/80",
         badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",
         icon: "text-amber-400",
-        iconBg: "bg-amber-500/20"
+        iconBg: "bg-amber-500/20",
+        expandBtn: "text-amber-400 hover:bg-amber-500/10"
     },
     emerald: {
         gradient: "from-emerald-500/20 via-teal-500/10 to-transparent",
@@ -45,7 +46,8 @@ const colorSchemes = {
         textMuted: "text-emerald-200/80",
         badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
         icon: "text-emerald-400",
-        iconBg: "bg-emerald-500/20"
+        iconBg: "bg-emerald-500/20",
+        expandBtn: "text-emerald-400 hover:bg-emerald-500/10"
     },
     blue: {
         gradient: "from-blue-500/20 via-cyan-500/10 to-transparent",
@@ -56,7 +58,8 @@ const colorSchemes = {
         textMuted: "text-blue-200/80",
         badge: "bg-blue-500/20 text-blue-300 border-blue-500/30",
         icon: "text-blue-400",
-        iconBg: "bg-blue-500/20"
+        iconBg: "bg-blue-500/20",
+        expandBtn: "text-blue-400 hover:bg-blue-500/10"
     },
     purple: {
         gradient: "from-purple-500/20 via-pink-500/10 to-transparent",
@@ -67,8 +70,200 @@ const colorSchemes = {
         textMuted: "text-purple-200/80",
         badge: "bg-purple-500/20 text-purple-300 border-purple-500/30",
         icon: "text-purple-400",
-        iconBg: "bg-purple-500/20"
+        iconBg: "bg-purple-500/20",
+        expandBtn: "text-purple-400 hover:bg-purple-500/10"
     }
+}
+
+// Individual expandable card component
+function ExpandableInvestmentCard({
+    card,
+    idx,
+    scheme
+}: {
+    card: InvestmentCard
+    idx: number
+    scheme: typeof colorSchemes.amber
+}) {
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    const getIcon = (type: string, colorClass: string) => {
+        const iconProps = { className: `w-5 h-5 ${colorClass}` };
+        switch (type) {
+            case 'crypto': return <Bitcoin {...iconProps} />;
+            case 'safe': return <DollarSign {...iconProps} />;
+            case 'goal': return <Target {...iconProps} />;
+            default: return <TrendingUp {...iconProps} />;
+        }
+    }
+
+    // Check if text is long enough to need expansion
+    const needsExpansion = card.prediction.length > 100
+
+    return (
+        <motion.div
+            key={idx}
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{
+                delay: idx * 0.1,
+                duration: 0.5,
+                ease: [0.25, 0.46, 0.45, 0.94]
+            }}
+            className="group"
+        >
+            <motion.div
+                layout
+                className={`
+                    relative rounded-2xl overflow-hidden
+                    bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90
+                    backdrop-blur-xl
+                    border ${scheme.border} ${scheme.borderHover}
+                    transition-all duration-500 ease-out
+                    hover:shadow-2xl hover:shadow-black/20
+                    hover:-translate-y-1
+                `}
+            >
+                {/* Ambient Glow Effect */}
+                <div className={`
+                    absolute -top-20 -right-20 w-40 h-40 
+                    ${scheme.glow} rounded-full 
+                    blur-[80px] opacity-20
+                    group-hover:opacity-40 group-hover:scale-110
+                    transition-all duration-700
+                `} />
+
+                {/* Subtle Grid Pattern */}
+                <div className="absolute inset-0 opacity-[0.02]"
+                    style={{
+                        backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+                        backgroundSize: '24px 24px'
+                    }}
+                />
+
+                {/* Content */}
+                <motion.div layout className="relative p-6 flex flex-col">
+                    {/* Header Row */}
+                    <div className="flex justify-between items-start mb-5">
+                        <motion.div
+                            className={`
+                                p-3 rounded-xl ${scheme.iconBg}
+                                border border-white/5
+                                shadow-lg shadow-black/10
+                            `}
+                            whileHover={{ scale: 1.1, rotate: 5 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            {getIcon(card.icon, scheme.icon)}
+                        </motion.div>
+
+                        {card.timeHorizon && (
+                            <motion.div
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: idx * 0.1 + 0.2 }}
+                            >
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                    {card.timeHorizon}
+                                </span>
+                            </motion.div>
+                        )}
+                    </div>
+
+                    {/* Title */}
+                    <motion.h3
+                        layout="position"
+                        className={`text-base font-bold uppercase tracking-wide mb-3 ${scheme.text}`}
+                    >
+                        {card.title}
+                    </motion.h3>
+
+                    {/* Prediction Text - Collapsible */}
+                    <div className="relative mb-4">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={isExpanded ? "expanded" : "collapsed"}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{
+                                    opacity: 1,
+                                    height: "auto"
+                                }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3, ease: "easeInOut" }}
+                            >
+                                <p className={`text-sm text-slate-400 leading-relaxed font-medium ${!isExpanded && needsExpansion ? 'line-clamp-2' : ''}`}>
+                                    {card.prediction}
+                                </p>
+                            </motion.div>
+                        </AnimatePresence>
+
+                        {/* Show More/Less Button */}
+                        {needsExpansion && (
+                            <motion.button
+                                onClick={() => setIsExpanded(!isExpanded)}
+                                className={`
+                                    flex items-center gap-1 mt-2 px-2 py-1 rounded-lg text-xs font-semibold
+                                    ${scheme.expandBtn} transition-colors
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <span>{isExpanded ? 'Show Less' : 'Read More'}</span>
+                                <motion.div
+                                    animate={{ rotate: isExpanded ? 180 : 0 }}
+                                    transition={{ duration: 0.3 }}
+                                >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                </motion.div>
+                            </motion.button>
+                        )}
+                    </div>
+
+                    {/* Value Section */}
+                    <motion.div
+                        layout="position"
+                        className="space-y-4 pt-4 border-t border-slate-800/50"
+                    >
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5">
+                                Projected Value
+                            </div>
+                            <motion.div
+                                className={`
+                                    font-black font-mono tracking-tight leading-none
+                                    bg-gradient-to-r ${scheme.gradient.replace('to-transparent', `to-white`)} 
+                                    bg-clip-text text-transparent
+                                    ${card.projectedValue.length > 20 ? 'text-xl' : 'text-2xl'}
+                                `}
+                                style={{ WebkitTextFillColor: 'white' }}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.1 + 0.3 }}
+                            >
+                                {card.projectedValue}
+                            </motion.div>
+                        </div>
+
+                        {/* ROI Badge */}
+                        <motion.div
+                            className={`
+                                w-full py-3 px-4 rounded-xl
+                                ${scheme.badge} border
+                                text-center font-bold text-xs uppercase tracking-wider
+                                backdrop-blur-sm
+                            `}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            {card.roi}
+                        </motion.div>
+                    </motion.div>
+                </motion.div>
+            </motion.div>
+        </motion.div>
+    )
 }
 
 export function InvestmentInsight({ amount, data, isLoading }: InvestmentInsightProps) {
@@ -99,8 +294,11 @@ export function InvestmentInsight({ amount, data, isLoading }: InvestmentInsight
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                     {[1, 2, 3, 4].map(i => (
-                        <div
+                        <motion.div
                             key={i}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.1 }}
                             className="h-72 bg-gradient-to-br from-slate-900/80 to-slate-950/80 rounded-2xl border border-slate-800/50 overflow-hidden relative"
                         >
                             <div className="absolute inset-0 bg-gradient-to-br from-slate-700/5 to-transparent animate-pulse" />
@@ -120,7 +318,7 @@ export function InvestmentInsight({ amount, data, isLoading }: InvestmentInsight
                                     <div className="w-full h-10 bg-slate-800/50 rounded-lg animate-pulse" />
                                 </div>
                             </div>
-                        </div>
+                        </motion.div>
                     ))}
                 </div>
             </div>
@@ -129,24 +327,18 @@ export function InvestmentInsight({ amount, data, isLoading }: InvestmentInsight
 
     if (!parsedData) return null;
 
-    const getIcon = (type: string, colorClass: string) => {
-        const iconProps = { className: `w-5 h-5 ${colorClass}` };
-        switch (type) {
-            case 'crypto': return <Bitcoin {...iconProps} />;
-            case 'safe': return <DollarSign {...iconProps} />;
-            case 'goal': return <Target {...iconProps} />;
-            default: return <TrendingUp {...iconProps} />;
-        }
-    }
-
     return (
         <div className="w-full space-y-6">
             {/* Section Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="relative">
+                    <motion.div
+                        className="relative"
+                        animate={{ rotate: [0, 10, -10, 0] }}
+                        transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
+                    >
                         <Sparkles className="w-4 h-4 text-emerald-400" />
-                    </div>
+                    </motion.div>
                     <span className="text-xs uppercase tracking-widest text-slate-500 font-semibold">
                         AI-Powered Projections
                     </span>
@@ -161,106 +353,13 @@ export function InvestmentInsight({ amount, data, isLoading }: InvestmentInsight
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                 {parsedData.cards.map((card, idx) => {
                     const scheme = colorSchemes[card.color] || colorSchemes.emerald;
-
                     return (
-                        <motion.div
+                        <ExpandableInvestmentCard
                             key={idx}
-                            initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{
-                                delay: idx * 0.1,
-                                duration: 0.5,
-                                ease: [0.25, 0.46, 0.45, 0.94]
-                            }}
-                            className="group"
-                        >
-                            <div className={`
-                                relative h-full rounded-2xl overflow-hidden
-                                bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90
-                                backdrop-blur-xl
-                                border ${scheme.border} ${scheme.borderHover}
-                                transition-all duration-500 ease-out
-                                hover:shadow-2xl hover:shadow-black/20
-                                hover:-translate-y-1
-                            `}>
-                                {/* Ambient Glow Effect */}
-                                <div className={`
-                                    absolute -top-20 -right-20 w-40 h-40 
-                                    ${scheme.glow} rounded-full 
-                                    blur-[80px] opacity-20
-                                    group-hover:opacity-40 group-hover:scale-110
-                                    transition-all duration-700
-                                `} />
-
-                                {/* Subtle Grid Pattern */}
-                                <div className="absolute inset-0 opacity-[0.02]"
-                                    style={{
-                                        backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-                                        backgroundSize: '24px 24px'
-                                    }}
-                                />
-
-                                {/* Content */}
-                                <div className="relative p-6 flex flex-col h-full min-h-[280px]">
-                                    {/* Header Row */}
-                                    <div className="flex justify-between items-start mb-5">
-                                        <div className={`
-                                            p-3 rounded-xl ${scheme.iconBg}
-                                            border border-white/5
-                                            shadow-lg shadow-black/10
-                                        `}>
-                                            {getIcon(card.icon, scheme.icon)}
-                                        </div>
-
-                                        {card.timeHorizon && (
-                                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 backdrop-blur-sm">
-                                                <Clock className="w-3 h-3 text-slate-400" />
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                                                    {card.timeHorizon}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Title */}
-                                    <h3 className={`text-base font-bold uppercase tracking-wide mb-3 ${scheme.text}`}>
-                                        {card.title}
-                                    </h3>
-
-                                    {/* Prediction Text */}
-                                    <p className="text-sm text-slate-400 leading-relaxed font-medium flex-grow line-clamp-3 mb-6">
-                                        {card.prediction}
-                                    </p>
-
-                                    {/* Value Section */}
-                                    <div className="space-y-4 pt-4 border-t border-slate-800/50">
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1.5">
-                                                Projected Value
-                                            </div>
-                                            <div className={`
-                                                font-black font-mono tracking-tight leading-none
-                                                bg-gradient-to-r ${scheme.gradient.replace('to-transparent', `to-white`)} 
-                                                bg-clip-text text-transparent
-                                                ${card.projectedValue.length > 20 ? 'text-xl' : 'text-2xl'}
-                                            `} style={{ WebkitTextFillColor: 'white' }}>
-                                                {card.projectedValue}
-                                            </div>
-                                        </div>
-
-                                        {/* ROI Badge */}
-                                        <div className={`
-                                            w-full py-3 px-4 rounded-xl
-                                            ${scheme.badge} border
-                                            text-center font-bold text-xs uppercase tracking-wider
-                                            backdrop-blur-sm
-                                        `}>
-                                            {card.roi}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </motion.div>
+                            card={card}
+                            idx={idx}
+                            scheme={scheme}
+                        />
                     );
                 })}
             </div>
