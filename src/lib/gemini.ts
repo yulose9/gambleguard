@@ -26,8 +26,8 @@ async function getAIClient(): Promise<GoogleGenAI | null> {
     return aiClient;
 }
 
-// Using a stable, fast model
-const modelId = 'gemini-2.5-flash-preview-05-20';
+// Using stable flash model for production reliability
+const modelId = 'gemini-1.5-flash';
 
 export async function getGeminiInsight(amount: number): Promise<string | null> {
     const ai = await getAIClient();
@@ -201,8 +201,16 @@ function getFallbackInvestmentData(amount: number) {
 }
 
 export async function getWalletAnalysis(logs: any[]): Promise<string | null> {
+    // Early return if no logs
+    if (!logs || logs.length === 0) {
+        return "Start logging your savings to get AI-powered financial insights.";
+    }
+
     const ai = await getAIClient();
-    if (!ai) return "Your wallet is growing steadily. Consistency is key to building long-term wealth.";
+    if (!ai) {
+        console.warn("AI client not available for wallet analysis");
+        return getWalletFallback(logs);
+    }
 
     try {
         const simplifiedLogs = logs.slice(0, 20).map(l => ({
@@ -211,21 +219,54 @@ export async function getWalletAnalysis(logs: any[]): Promise<string | null> {
         }));
 
         const total = simplifiedLogs.reduce((sum, l) => sum + l.amount, 0);
+        const avgSave = Math.round(total / simplifiedLogs.length);
+        const logsCount = simplifiedLogs.length;
 
-        const prompt = `Analyze these savings logs: ${JSON.stringify(simplifiedLogs)}.
-Total Saved: ₱${total} PHP.
+        const prompt = `You are analyzing a user's gambling prevention savings. Here's their data:
+- Total logs: ${logsCount}
+- Total saved: ₱${total.toLocaleString()} PHP
+- Average save: ₱${avgSave.toLocaleString()} per entry
+- Recent saves: ${JSON.stringify(simplifiedLogs.slice(0, 5))}
 
-Write 2 sentences analyzing their saving pattern and one motivating statement.
-No markdown. No quotes. Just plain text.`;
+Write a personalized 2-3 sentence analysis of their saving pattern. Be specific about:
+1. Their consistency (are they saving regularly?)
+2. The growth trend (are amounts increasing?)
+3. One motivational statement about their progress
+
+RULES:
+- No markdown formatting
+- No quotation marks
+- Be specific with their numbers
+- Sound like a supportive financial coach`;
 
         const result = await ai.models.generateContent({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
         });
 
-        return result.text?.trim() || "Your wallet is growing steadily. Consistency is key to building long-term wealth.";
+        const text = result.text?.trim();
+        if (!text || text.length < 20) {
+            console.warn("Empty or too short wallet analysis response");
+            return getWalletFallback(logs);
+        }
+
+        return text;
     } catch (error) {
         console.error("Error fetching wallet analysis:", error);
-        return "Your wallet is growing steadily. Consistency is key to building long-term wealth.";
+        return getWalletFallback(logs);
     }
+}
+
+function getWalletFallback(logs: any[]): string {
+    const total = logs.reduce((sum, l) => sum + (l.amount || 0), 0);
+    const count = logs.length;
+    const avg = count > 0 ? Math.round(total / count) : 0;
+
+    const fallbacks = [
+        `You've saved ₱${total.toLocaleString()} across ${count} entries, averaging ₱${avg.toLocaleString()} per save. This discipline is the foundation of wealth building - keep going!`,
+        `With ${count} logged saves totaling ₱${total.toLocaleString()}, you're proving that consistency beats luck every time. The average saver can't match your ₱${avg.toLocaleString()} per entry.`,
+        `₱${total.toLocaleString()} saved, ${count} temptations resisted. At this rate, you're building a fortress of financial security. Each ₱${avg.toLocaleString()} save is a brick in that wall.`
+    ];
+
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
